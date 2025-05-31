@@ -1,0 +1,223 @@
+[
+    {
+        "id": "ecg-monitoring-tab",
+        "type": "tab",
+        "label": "ECG Smartwatch Monitoring",
+        "disabled": false,
+        "info": "Flow for receiving ECG data from the smartwatch simulator"
+    },
+    {
+        "id": "mqtt-broker-config",
+        "type": "mqtt-broker",
+        "name": "Local Mosquitto",
+        "broker": "localhost",
+        "port": "1883",
+        "clientid": "node-red-ecg-client",
+        "autoConnect": true,
+        "usetls": false,
+        "protocolVersion": "4",
+        "keepalive": "60",
+        "cleansession": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "",
+        "closeQos": "0",
+        "closePayload": "",
+        "closeMsg": {},
+        "willTopic": "",
+        "willQos": "0",
+        "willPayload": "",
+        "willMsg": {},
+        "userProps": "",
+        "sessionExpiry": ""
+    },
+    {
+        "id": "mqtt-ecg-in",
+        "type": "mqtt in",
+        "z": "ecg-monitoring-tab",
+        "name": "Smartwatch Data Input",
+        "topic": "smartwatch/data",
+        "qos": "0",
+        "datatype": "json",
+        "broker": "mqtt-broker-config",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 140,
+        "y": 120,
+        "wires": [
+            [
+                "process-ecg-data",
+                "debug-raw-mqtt"
+            ]
+        ]
+    },
+    {
+        "id": "debug-raw-mqtt",
+        "type": "debug",
+        "z": "ecg-monitoring-tab",
+        "name": "Raw MQTT Data",
+        "active": true,
+        "tosidebar": true,
+        "console": true,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 320,
+        "y": 80,
+        "wires": []
+    },
+    {
+        "id": "process-ecg-data",
+        "type": "function",
+        "z": "ecg-monitoring-tab",
+        "name": "Process ECG Data",
+        "func": "const timestamp = msg.payload.timestamp;\nconst heartRate = msg.payload.heart_rate;\nconst zone = msg.payload.zone;\nconst ecgSamples = msg.payload.ecg_samples;\n\n// Store in flow context\nlet heartRateHistory = flow.get('heartRateHistory') || [];\n\n// Limit history to last 60 entries\nif (heartRateHistory.length > 60) {\n    heartRateHistory.shift();\n}\n\nheartRateHistory.push({\n    time: timestamp,\n    value: heartRate,\n    zone: zone\n});\n\n// Update flow variables\nflow.set('heartRateHistory', heartRateHistory);\nflow.set('latestECGSamples', ecgSamples);\nflow.set('latestHeartRate', heartRate);\nflow.set('latestZone', zone);\nflow.set('lastUpdateTime', timestamp);\n\n// Prepare output message\nconst processedData = {\n    timestamp: timestamp,\n    heartRate: heartRate,\n    zone: zone,\n    zoneText: getZoneText(zone),\n    samples: ecgSamples,\n    historyCount: heartRateHistory.length\n};\n\nmsg.payload = processedData;\nreturn msg;\n\nfunction getZoneText(zone) {\n    switch(zone) {\n        case 0: return 'Below Normal';\n        case 1: return 'Rest';\n        case 2: return 'Light Activity';\n        case 3: return 'Moderate Activity';\n        case 4: return 'Intense Activity';\n        case 5: return 'Maximum Effort';\n        default: return 'Unknown';\n    }\n}",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 340,
+        "y": 120,
+        "wires": [
+            [
+                "debug-processed-data"
+            ]
+        ]
+    },
+    {
+        "id": "debug-processed-data",
+        "type": "debug",
+        "z": "ecg-monitoring-tab",
+        "name": "Processed ECG Data",
+        "active": true,
+        "tosidebar": true,
+        "console": true,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 560,
+        "y": 120,
+        "wires": []
+    },
+    {
+        "id": "http-heartrate-api",
+        "type": "http in",
+        "z": "ecg-monitoring-tab",
+        "name": "GET Heart Rate API",
+        "url": "/heartrate",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 150,
+        "y": 200,
+        "wires": [
+            [
+                "build-api-response"
+            ]
+        ]
+    },
+    {
+        "id": "build-api-response",
+        "type": "function",
+        "z": "ecg-monitoring-tab",
+        "name": "Build API Response",
+        "func": "const heartRateHistory = flow.get('heartRateHistory') || [];\nconst latestECGSamples = flow.get('latestECGSamples') || [];\nconst latestHeartRate = flow.get('latestHeartRate') || 0;\nconst latestZone = flow.get('latestZone') || 0;\nconst lastUpdateTime = flow.get('lastUpdateTime') || new Date().toISOString();\n\n// Build response payload\nmsg.payload = {\n    timestamp: lastUpdateTime,\n    heart_rate: latestHeartRate,\n    zone: latestZone,\n    zone_text: getZoneText(latestZone),\n    history: heartRateHistory,\n    ecg_samples: latestECGSamples\n};\n\n// Set response headers\nmsg.headers = {\n    \"Content-Type\": \"application/json\",\n    \"Access-Control-Allow-Origin\": \"*\"\n};\n\nreturn msg;\n\nfunction getZoneText(zone) {\n    switch(zone) {\n        case 0: return 'Below Normal';\n        case 1: return 'Rest';\n        case 2: return 'Light Activity';\n        case 3: return 'Moderate Activity';\n        case 4: return 'Intense Activity';\n        case 5: return 'Maximum Effort';\n        default: return 'Unknown';\n    }\n}",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 360,
+        "y": 200,
+        "wires": [
+            [
+                "http-heartrate-response",
+                "debug-api-response"
+            ]
+        ]
+    },
+    {
+        "id": "debug-api-response",
+        "type": "debug",
+        "z": "ecg-monitoring-tab",
+        "name": "API Response Data",
+        "active": true,
+        "tosidebar": true,
+        "console": true,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 560,
+        "y": 240,
+        "wires": []
+    },
+    {
+        "id": "http-heartrate-response",
+        "type": "http response",
+        "z": "ecg-monitoring-tab",
+        "name": "Send Heart Rate Response",
+        "statusCode": "200",
+        "headers": {},
+        "x": 590,
+        "y": 200,
+        "wires": []
+    },
+    {
+        "id": "http-status-api",
+        "type": "http in",
+        "z": "ecg-monitoring-tab",
+        "name": "GET System Status",
+        "url": "/status",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 150,
+        "y": 300,
+        "wires": [
+            [
+                "build-status-response"
+            ]
+        ]
+    },
+    {
+        "id": "build-status-response",
+        "type": "function",
+        "z": "ecg-monitoring-tab",
+        "name": "Build Status Response",
+        "func": "const heartRateHistory = flow.get('heartRateHistory') || [];\nconst latestECGSamples = flow.get('latestECGSamples') || [];\nconst latestHeartRate = flow.get('latestHeartRate') || 0;\nconst latestZone = flow.get('latestZone') || 0;\nconst lastUpdateTime = flow.get('lastUpdateTime');\n\n// Calculate uptime\nconst startTime = global.get('startTime') || Date.now();\nconst uptime = Math.floor((Date.now() - startTime) / 1000);\n\nmsg.payload = {\n    status: 'running',\n    uptime: uptime + 's',\n    timestamp: new Date().toISOString(),\n    data: {\n        heartRate: latestHeartRate,\n        zone: latestZone,\n        historyCount: heartRateHistory.length,\n        ecgSamplesCount: latestECGSamples.length,\n        lastDataReceived: lastUpdateTime\n    },\n    services: {\n        mqtt: 'connected',\n        nodeRed: 'running',\n        api: 'available'\n    }\n};\n\nmsg.headers = {\n    \"Content-Type\": \"application/json\",\n    \"Access-Control-Allow-Origin\": \"*\"\n};\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "// Store startup time\nglobal.set('startTime', Date.now());",
+        "finalize": "",
+        "libs": [],
+        "x": 360,
+        "y": 300,
+        "wires": [
+            [
+                "http-status-response"
+            ]
+        ]
+    },
+    {
+        "id": "http-status-response",
+        "type": "http response",
+        "z": "ecg-monitoring-tab",
+        "name": "Send Status Response",
+        "statusCode": "200",
+        "headers": {},
+        "x": 580,
+        "y": 300,
+        "wires": []
+    }
+]
