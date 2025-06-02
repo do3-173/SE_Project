@@ -64,7 +64,6 @@ class SmartWatchSimulator:
         """
         if rc == 0:
             print(f"Connected to MQTT broker at {self.broker}:{self.port}")
-            # Publish connection status
             status = {
                 "status": "connected",
                 "timestamp": time.time()
@@ -204,7 +203,6 @@ class SmartWatchSimulator:
             start_idx = i * self.processor.sampling_rate
             end_idx = start_idx + self.processor.sampling_rate
             if end_idx <= len(ecg_data):
-                # Get the full segment for this second (don't downsample)
                 ecg_samples = ecg_data[start_idx:end_idx].tolist()
                 
                 zone = self.get_heart_rate_zone(heart_rate)
@@ -213,7 +211,7 @@ class SmartWatchSimulator:
                     "timestamp": time.time(),
                     "heart_rate": heart_rate,
                     "zone": zone,
-                    "ecg_samples": ecg_samples,  # Send only this second's data
+                    "ecg_samples": ecg_samples,
                     "source": self.processor.source_files[0] if self.processor.source_files else "unknown",
                     "participant": participant if participant is not None else self.participant
                 }

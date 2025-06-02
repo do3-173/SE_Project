@@ -1,9 +1,0 @@
-{
-    "status": "healthy",
-    "services": {
-        "node_red": "running",
-        "mqtt": "running on port 1883",
-        "http_server": "running on port 8000"
-    },
-    "timestamp": "dynamic"
-}
